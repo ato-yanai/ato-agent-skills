@@ -1,0 +1,150 @@
+---
+name: ato-microcms-fetch
+description: microCMS のコンテンツを SDK 不使用・標準 fetch だけで取得する TypeScript ライブラリを導入する。汎用 fetch ラッパー（タイムアウト・リトライ・型付きエラー）と microCMS 層（リスト取得 getList・詳細取得 getListDetail・全件取得 getAllContents・オブジェクト形式 getObject）に分離し、エンドポイント名→型のマップで登録した API だけを型安全に受け付ける（未登録名は型エラー）。API キーは環境変数に集約する。ユーザーが microCMS からのデータ取得・API 連携・記事一覧/詳細の fetch 実装を求めたときに使う。
+license: MIT
+metadata:
+  author: yanai
+  version: "1.0"
+---
+
+# microCMS Fetch
+
+microCMS のコンテンツ API を、**SDK を使わず標準 `fetch` だけ**で叩く TypeScript ライブラリを
+プロジェクトへ導入するスキル。**汎用 fetch ラッパー**と **microCMS 層**を分離し、fetch ラッパーは
+他の REST API にも再利用できる。
+
+## 方針（これだけは守る）
+
+- **結果・進捗の報告はすべて日本語で行う（絶対事項）。** 配置したファイル、設定した env、
+  検証結果は必ず日本語で伝える。
+- **SDK（microcms-js-sdk）は使わない。** 標準 `fetch` のみ（Node 18+ / Edge / ブラウザ可）。
+- **API キーは環境変数に集約し、サーバ専用にする。** `NEXT_PUBLIC_` / `PUBLIC_` などの公開
+  プレフィックスは付けない（クライアントバンドルに漏れる）。ブラウザから直接叩かない。
+- **fetch 層と microCMS 層を分ける。** 汎用処理（タイムアウト・リトライ・エラー）は
+  `api-client.ts` に閉じ込め、`microcms.ts` は URL 組立と型付けに専念する。
+
+## 構成（配置するファイル）
+
+`assets/lib/` の 4 ファイルを、プロジェクトの `src/lib/microcms/`（無ければ作る）等へコピーする。
+
+| ファイル | 役割 |
+| --- | --- |
+| `api-client.ts` | 汎用 fetch ラッパー。タイムアウト / リトライ＋バックオフ / 429 対応 / 型付き `HttpError` / クエリ組立 / fetch オプション透過。**microCMS 非依存**。 |
+| `microcms.ts` | microCMS 層。`getList` / `getListDetail` / `getAllContents` / `getObject` と型定義。 |
+| `endpoints.ts` | **エンドポイント名 → コンテンツ型のマップ**。ここに登録した名前だけが各関数で受け付けられ、戻り値の型も自動で決まる。 |
+| `env.ts` | 必須環境変数（`MICROCMS_SERVICE_DOMAIN` / `MICROCMS_API_KEY`）の検証。 |
+
+## Instructions
+
+1. **TypeScript 構成を確認する。** `tsconfig.json` の有無、`src/` レイアウト、パスエイリアス
+   （`@/lib/...` 等）を見て、コピー先（既定 `src/lib/microcms/`）を決める。JS プロジェクトなら
+   ユーザーに TS 化 or `.js` への読み替えを確認する。
+2. **ライブラリを配置する。** `assets/lib/{api-client,microcms,endpoints,env}.ts` をコピー先に置く。
+   既存の同名ファイルがあれば上書き前に確認する。
+3. **エンドポイントを登録する（型安全の要）。** `endpoints.ts` の `MicroCMSListEndpoints` /
+   `MicroCMSObjectEndpoints` に、プロジェクトの各 API を「エンドポイント名 → コンテンツ型」で
+   追加する。ユーザーが既に持つ型（例 `NewsType`）があれば import して使う。無ければ API スキーマから
+   型を起こして登録する。**ここに登録した名前以外は各関数で型エラーになる。**
+   - **1 API ごとの型は `src/types/microcms/`（等）に分け、`endpoints.ts` は import とマップだけにする。**
+     ドメイン型はプロジェクト固有の知識なので、汎用の `lib/` 3 ファイルとは置き場所を分ける
+     （型が増えても索引が肥大化せず、将来の型自動生成とも干渉しない）。ごく小さい型のみインライン可。
+4. **環境変数を設定する。** `assets/env.example` を参考に、プロジェクトの `.env.example` へ 2 変数を
+   追記し、`.env.local`（または `.env`）に実値を設定する。`.gitignore` が `.env.local` /
+   `.env*.local` を除外しているか確認し、していなければ追記する（**実キーをコミットしない**）。
+5. **取得パターンを使う。** 用途に応じて 4 関数を呼ぶ（下の「使い方」）。登録済みエンドポイント名を
+   渡すだけで戻り値が型付くので、明示的な型引数は不要。`getAllContents` はレート制限に配慮して
+   直列で `limit=100` ループする。
+6. **キャッシュ方針を決める。** Next.js / Astro それぞれの方法（下の「キャッシュ」）で
+   `fetchOptions` を渡す。既定はラッパーの素の挙動（ランタイム依存）。
+7. **検証する。** 代表的な取得（リスト1回・詳細1回）を実行するか、型チェック（`tsc --noEmit`）で
+   配置物がプロジェクトの設定で通ることを確認する。報告は日本語でまとめる。
+
+## 使い方
+
+まず `endpoints.ts` に API を登録する（これが型の正）:
+
+```ts
+// endpoints.ts
+import type { NewsType } from '@/types/news';
+
+export interface MicroCMSListEndpoints {
+  news: NewsType;                          // 例: { title: string }
+  blogs: { title: string; body: string };
+}
+export interface MicroCMSObjectEndpoints {
+  config: { siteTitle: string };
+}
+```
+
+あとは登録名を渡すだけで型が決まる（**`<NewsType>` のような型引数は書かない**。未登録名はコンパイルエラー）:
+
+```ts
+import { getList, getListDetail, getAllContents, getObject } from '@/lib/microcms/microcms';
+
+// リスト取得（戻り値は MicroCMSListResponse<NewsType & {id, createdAt...}>）
+const list = await getList('news', { limit: 10, orders: '-publishedAt', fields: ['id', 'title'] });
+list.contents[0].title; // string ✓   list.totalCount / offset / limit
+
+// 詳細取得
+const post = await getListDetail('blogs', 'CONTENT_ID', { depth: 2 });
+post.body; // string ✓
+
+// 下書きプレビュー
+const draft = await getListDetail('blogs', 'CONTENT_ID', { draftKey: 'xxxx' });
+
+// 全件取得（totalCount まで自動ループ。最大件数も指定可）
+const all = await getAllContents('news', { filters: 'category[equals]news' });
+
+// オブジェクト形式
+const config = await getObject('config');
+config.siteTitle; // string ✓
+
+// 未登録のエンドポイントは型エラー
+// await getList('unknown'); // ✗ コンパイルエラー
+```
+
+## クエリ
+
+`MicroCMSQueries` で指定する: `limit`(最大100) / `offset` / `orders`(例 `-publishedAt`) /
+`q`(全文検索) / `fields`(配列可) / `ids`(配列可) / `filters`(例 `category[equals]xxxx`) /
+`depth`(1–3) / `draftKey` / `richEditorFormat`。配列は自動でカンマ区切りに、`undefined` は除外される。
+
+## キャッシュ（fetchOptions の透過）
+
+第3引数 `options.fetchOptions` が `fetch` にそのまま渡る。
+
+```ts
+// Next.js (App Router): ISR / タグ再検証
+await getList<Blog>('blogs', { limit: 10 }, {
+  fetchOptions: { next: { revalidate: 60, tags: ['blogs'] } },
+});
+// 毎回最新にしたいとき
+await getListDetail<Blog>('blogs', id, undefined, { fetchOptions: { cache: 'no-store' } });
+```
+
+- **Astro:** SSG（ビルド時取得）は `await` するだけ。SSR で都度取得したいときは
+  `fetchOptions: { cache: 'no-store' }` を渡す。
+
+## 通信で考慮済みの点（api-client.ts に実装）
+
+- **タイムアウト**: 既定 10s（`timeoutMs`）。`AbortSignal.timeout` で試行ごとに打ち切り。
+- **リトライ**: 429 / 408 / 5xx / ネットワーク断のみ再試行（既定 3 回）。指数バックオフ＋ジッタ。
+  `Retry-After` / `X-RateLimit-Reset` を尊重。4xx（429 除く）は再試行しない。GET は冪等で安全。
+- **型付きエラー**: 非 2xx は `HttpError`（`status` / `url` / `body` 付き）。
+- **クエリ組立**: `URLSearchParams` で安全にエンコード（日本語も可）。
+- **ログ衛生**: API キーはエラーメッセージ・ログに出さない（URL とステータスのみ）。
+
+## Edge cases
+
+- **新しいエンドポイントを使いたい / 型エラーになる** → `endpoints.ts` のマップに登録すれば解決する。
+  登録名以外は受け付けない設計なので、`getList('xxx')` がエラーなら未登録のサイン。
+- **オブジェクト形式 vs リスト形式** → API スキーマで決まり、`endpoints.ts` でも別のマップに登録する。
+  オブジェクト形式は `MicroCMSObjectEndpoints` + `getObject`、リスト形式は `MicroCMSListEndpoints` +
+  `getList` / `getListDetail`。登録先と関数が食い違うと型エラーになる。
+- **全件取得が重い / 件数が多い** → `getAllContents` は直列ループ。`fields` で必要列に絞り、
+  `maxContents` で上限を設ける。レート制限（429）はラッパーが自動でバックオフ再試行する。
+- **下書きプレビュー** → `draftKey` を渡す。プレビュー経路は必ずサーバ側で実行し、キーを露出しない。
+- **API キーが漏れる** → `NEXT_PUBLIC_` / `PUBLIC_` を付けていないか、クライアントコンポーネントから
+  呼んでいないかを確認。取得はサーバ（Server Component / route handler / build 時）で行う。
+- **環境変数未設定** → `env.ts` が起動時に分かりやすい日本語エラーを投げる。`.env.local` を確認する。
+- **古いランタイム** → `fetch` / `AbortSignal.timeout` は Node 18+ が必要。古ければ更新を促す。
