@@ -19,7 +19,8 @@
 | --- | --- |
 | [ato-git-commit-message](skills/ato-git-commit-message/SKILL.md) | Conventional Commits 準拠のコミットメッセージを書く／レビューする |
 | [ato-eslint-prettier-setup](skills/ato-eslint-prettier-setup/SKILL.md) | プロジェクトを検出して ESLint + Prettier（Next.js / Astro / Tailwind 等）を自動セットアップする |
-| [ato-microcms-fetch](skills/ato-microcms-fetch/SKILL.md) | microCMS のコンテンツを SDK 不使用・fetch だけで取得する TypeScript ライブラリ（リスト／詳細／全件）を導入する |
+| [ato-fetch-client](skills/ato-fetch-client/SKILL.md) | 標準 fetch だけで作る汎用 REST API クライアント（タイムアウト・リトライ・型付きエラー）を導入する |
+| [ato-microcms-fetch](skills/ato-microcms-fetch/SKILL.md) | microCMS のコンテンツを SDK 不使用・fetch だけで取得する TypeScript ライブラリ（リスト／詳細／全件）を導入する。ato-fetch-client を土台にする |
 
 ## 規約
 
