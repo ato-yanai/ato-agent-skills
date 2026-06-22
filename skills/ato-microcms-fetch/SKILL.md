@@ -40,7 +40,7 @@ URL 組立・型付けに専念する。
 
 | ファイル | 役割 |
 | --- | --- |
-| `microcms.ts` | microCMS 層。`getList` / `getListDetail` / `getAllContents` / `getObject` と型定義。`./api-client` を import。 |
+| `microcms.ts` | microCMS 層。`getList` / `getListDetail` / `getAllContents` / `getObject` と型定義（`MicroCMSListContent` / `MicroCMSImage` 等の共通型を提供）。`./api-client` を import。 |
 | `endpoints.ts` | **エンドポイント名 → コンテンツ型のマップ**。ここに登録した名前だけが各関数で受け付けられ、戻り値の型も自動で決まる。 |
 | `env.ts` | 必須環境変数（`MICROCMS_SERVICE_DOMAIN` / `MICROCMS_API_KEY`）の検証。 |
 | `api-client.ts` | （[ato-fetch-client](../ato-fetch-client/SKILL.md) が配置）汎用 fetch ラッパー。 |
@@ -53,13 +53,30 @@ URL 組立・型付けに専念する。
 2. **ライブラリを配置する。** `assets/lib/{microcms,endpoints,env}.ts` を、`api-client.ts` と同じ
    ディレクトリに置く（`microcms.ts` は `./api-client` を import する）。JS プロジェクトなら
    ユーザーに TS 化 or `.js` への読み替えを確認する。既存の同名ファイルは上書き前に確認する。
+   - **配置先は `src/` の有無で決める。** `src/` があれば `src/lib/microcms/`、**無ければ root の
+     `lib/microcms/`**（root に `app/` を直置きする Next.js 構成など）。型の置き場所も同様に
+     `src/types/microcms/` か root `types/microcms/` に合わせる。
+   - **資材そのもの（このスキルの `assets/` や、リポジトリにスキルを同梱している場合）を
+     プロジェクトの tsconfig が拾わないようにする。** 下の Edge cases「TS2307」を参照。
 3. **エンドポイントを登録する（型安全の要）。** `endpoints.ts` の `MicroCMSListEndpoints` /
    `MicroCMSObjectEndpoints` に、プロジェクトの各 API を「エンドポイント名 → コンテンツ型」で
-   追加する。ユーザーが既に持つ型（例 `NewsType`）があれば import して使う。無ければ API スキーマから
-   型を起こして登録する。**ここに登録した名前以外は各関数で型エラーになる。**
+   追加する。**ここに登録した名前以外は各関数で型エラーになる。**
+   - **型の用意は次の順で判断する（型未生成のままの登録）。**
+     1. **既にある型を使う。** ユーザーが型を持っていないか確認する。あればファイルを教えてもらい
+        import する（例 `import type { NewsType } from '@/types/news'`）。
+     2. **その場で生成する。** 無ければスキーマ JSON（管理画面の「API設定 → スキーマ → エクスポート」）を
+        出してもらい、[ato-microcms-types](../ato-microcms-types/SKILL.md) で型を起こしてから登録する。
+        これが基本ルート。
+     3. **スタブで仮登録する。** スキーマが今すぐ出せない等で型を作れないときだけ、ビルドを止めない
+        ための暫定型を置く（下の「型が未生成のままエンドポイントを登録する」）。**後で必ず本物に置換する。**
+   - **エンドポイント名はスキーマのエクスポートファイル名から取る。** スキーマ JSON の中身には
+     エンドポイント名が無い。ファイル名 `api-{endpoint}-<日時>.json` の `{endpoint}` がそれ
+     （例: `api-post-20260622150906.json` → `post`）。これが `endpoints.ts` の登録キーになる。
    - **1 API ごとの型は `src/types/microcms/`（等）に分け、`endpoints.ts` は import とマップだけにする。**
      ドメイン型はプロジェクト固有の知識なので、汎用の `lib/` 3 ファイルとは置き場所を分ける
      （型が増えても索引が肥大化せず、将来の型自動生成とも干渉しない）。ごく小さい型のみインライン可。
+   - **`media` の画像型は `microcms.ts` の共通 `MicroCMSImage` を使う。** 各ドメイン型に重複定義せず
+     `import type { MicroCMSImage } from '@/lib/microcms/microcms'` で共有する（ato-microcms-types の生成物もこれに合わせる）。
 4. **環境変数を設定する。** `assets/env.example` を参考に、プロジェクトの `.env.example` へ 2 変数を
    追記し、`.env.local`（または `.env`）に実値を設定する。`.gitignore` が `.env.local` /
    `.env*.local` を除外しているか確認し、していなければ追記する（**実キーをコミットしない**）。
@@ -115,6 +132,28 @@ config.siteTitle; // string ✓
 // await getList('unknown'); // ✗ コンパイルエラー
 ```
 
+## 型が未生成のままエンドポイントを登録する（スタブ）
+
+型をまだ起こせないが取得側を先に書きたいときの暫定手段。**基本は先に型生成（上の手順3-2）**で、
+これはあくまでつなぎ。
+
+```ts
+// endpoints.ts
+export interface MicroCMSListEndpoints {
+  // TODO(ato-microcms-types): スキーマから型生成して置換する。 STUB
+  post: Record<string, unknown>;
+}
+```
+
+- **スタブ型は `Record<string, unknown>` を使う。** `{}` / `any` は使わない（`{}` は
+  `@typescript-eslint/no-empty-object-type` で落ち、`any` は型安全を失う）。
+- **必ず `STUB` と `TODO(ato-microcms-types)` の印を付ける。** 後で [ato-microcms-types](../ato-microcms-types/SKILL.md)
+  が型を生成したとき、この印を目印にスタブを本物の import へ置換する（往復の取り決め）。
+- **relation の参照先も同じ。** `Post.category` が `PostCategory` を参照するなら、`PostCategory` が
+  未生成のうちはその型ファイルを `export type PostCategory = Record<string, unknown>; // STUB` で仮置きし、
+  生成時に差し替える（空 `{}` で置かない）。
+- 置換が済んだらスタブの行・印・（空でなくなった interface の）`eslint-disable` を消す。
+
 ## クエリ
 
 `MicroCMSQueries` で指定する: `limit`(最大100) / `offset` / `orders`(例 `-publishedAt`) /
@@ -148,6 +187,13 @@ await getListDetail('blogs', id, undefined, { fetchOptions: { cache: 'no-store' 
 
 - **新しいエンドポイントを使いたい / 型エラーになる** → `endpoints.ts` のマップに登録すれば解決する。
   登録名以外は受け付けない設計なので、`getList('xxx')` がエラーなら未登録のサイン。
+- **空の registry が lint で落ちる（`@typescript-eslint/no-empty-object-type`）** → `endpoints.ts` の
+  `MicroCMSListEndpoints` / `MicroCMSObjectEndpoints` は未登録のうち**空インターフェイス**になり
+  TS-ESLint 構成で落ちる。型の正しさ上は空が正解（`keyof` が `never` になり全名を弾く）なので、
+  `Record<string, never>` 等に置き換えてはいけない（`keyof` が `string` になり全名を受け入れてしまう）。
+  **空のままにする side には直前に `// eslint-disable-next-line @typescript-eslint/no-empty-object-type` を
+  付ける。** エンドポイントを 1 つ登録して空でなくなったら、その行は不要（ESLint 9 は未使用 disable も
+  warn する）なので外す。テンプレートは両 interface に disable 付きで配布している。
 - **オブジェクト形式 vs リスト形式** → API スキーマで決まり、`endpoints.ts` でも別のマップに登録する。
   オブジェクト形式は `MicroCMSObjectEndpoints` + `getObject`、リスト形式は `MicroCMSListEndpoints` +
   `getList` / `getListDetail`。登録先と関数が食い違うと型エラーになる。
@@ -158,3 +204,12 @@ await getListDetail('blogs', id, undefined, { fetchOptions: { cache: 'no-store' 
   呼んでいないかを確認。取得はサーバ（Server Component / route handler / build 時）で行う。
 - **環境変数未設定** → `env.ts` が起動時に分かりやすい日本語エラーを投げる。`.env.local` を確認する。
 - **古いランタイム** → `fetch` / `AbortSignal.timeout` は Node 18+ が必要。古ければ更新を促す。
+- **スキル資材が tsc / next build を壊す（TS2307）** → スキルのソース（`assets/lib/microcms.ts`）は
+  隣に無い `./api-client` を import するため、これがプロジェクトの型チェック対象に入ると
+  `Cannot find module './api-client'`（TS2307）で**ビルド全体が落ちる**。`tsconfig.json` の `include`
+  が `**/*.ts` などで広いと、配布前の `assets/` を拾ってしまう。
+  - **対処:** プロジェクトに導入するのは `assets/lib/` の中身を**配置先へコピーした実体だけ**にし、
+    スキルのソースツリー（`assets/`）は `tsconfig.json` の `exclude` に追加する。
+    例: `"exclude": ["node_modules", "**/assets/**"]`。
+  - コピー後の実体は `api-client.ts` と同じディレクトリに揃うので TS2307 は起きない（原因は
+    あくまで「依存先が隣に無いスキルソースを拾ったこと」）。

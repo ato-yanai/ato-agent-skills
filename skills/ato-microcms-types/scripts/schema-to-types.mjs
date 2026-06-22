@@ -4,11 +4,15 @@
 // 使い方:
 //   node schema-to-types.mjs <schema.json> --name Blog            # 標準出力へ
 //   node schema-to-types.mjs <schema.json> --name Blog --out blog.ts
+//   node schema-to-types.mjs <schema.json> --name Blog --lib '@/lib/microcms/microcms'
 //
 // 生成されるのは「フィールドだけ」の型。id / createdAt 等の共通フィールドは
 // ato-microcms-fetch の取得ラッパー（MicroCMSListContent）が付与するので含めない。
+// media を使う型は、共通の MicroCMSImage をライブラリ（--lib、既定 '@/lib/microcms/microcms'）
+// から import して共有する（各ファイルに重複定義しない）。
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 function fail(msg) {
   console.error(`[schema-to-types] ${msg}`);
@@ -23,6 +27,7 @@ for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--name') opts.name = args[++i];
   else if (a === '--out') opts.out = args[++i];
+  else if (a === '--lib') opts.lib = args[++i];
   else if (a.startsWith('--')) fail(`不明なオプション: ${a}`);
   else positional.push(a);
 }
@@ -45,6 +50,12 @@ if (apiFields.length === 0) {
 }
 
 // --- ヘルパ ---
+// 文字列リテラルはシングルクオートで出す（多くのプロジェクトの Prettier/lint 規約に寄せる）。
+// 仕上げのフォーマットはプロジェクトのフォーマッタに任せる（SKILL の手順参照）。
+function q(s) {
+  return `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
 function pascal(s) {
   const out = String(s)
     .replace(/[-_ ]+/g, ' ')
@@ -63,11 +74,19 @@ for (const cf of customFields) {
 }
 
 const warnings = [];
+let usesImage = false; // media / mediaList を 1 つでも使ったら共通 MicroCMSImage を import する
 
 // repeater / custom が参照する customField 群を解決する。
+// repeater は複数形（...List）、単一カスタムフィールドは単数形（customFieldCreatedAt）で
+// 参照先を持つ。両方を見て、どちらも配列に正規化してから解決する。
 function resolveCustomRefs(field) {
-  const ids = field.customFieldCreatedAtList || field.customFieldCreatedAtIdList;
-  if (Array.isArray(ids) && ids.length) {
+  const raw =
+    field.customFieldCreatedAtList ??
+    field.customFieldCreatedAtIdList ??
+    field.customFieldCreatedAt ??
+    field.customFieldCreatedAtId;
+  const ids = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+  if (ids.length) {
     const list = ids.map((id) => customByCreatedAt.get(id)).filter(Boolean);
     if (list.length) return list;
   }
@@ -100,14 +119,16 @@ function fieldType(field, depth) {
     case 'date':
       return 'string';
     case 'media':
+      usesImage = true;
       return 'MicroCMSImage';
     case 'mediaList':
+      usesImage = true;
       return 'MicroCMSImage[]';
     case 'file':
       return '{ url: string }';
     case 'select': {
       const items = Array.isArray(field.selectItems) ? field.selectItems : [];
-      const union = items.map((it) => JSON.stringify(String(it.value ?? it.id))).join(' | ');
+      const union = items.map((it) => q(String(it.value ?? it.id))).join(' | ');
       // microCMS の select は単一選択でも配列で返る点に注意。
       return union ? `(${union})[]` : 'string[]';
     }
@@ -127,7 +148,9 @@ function fieldType(field, depth) {
     case 'repeater': {
       if (depth > 4) return 'unknown[]';
       const names = unionOfCustoms(field);
-      return names.length ? `(${names.join(' | ')})[]` : 'unknown[]';
+      if (!names.length) return 'unknown[]';
+      // 単一なら括弧不要（Image[]）、複数のみ union を括弧でくくる（(A | B)[]）。
+      return names.length === 1 ? `${names[0]}[]` : `(${names.join(' | ')})[]`;
     }
     default:
       warnings.push(`未知の kind '${field.kind}'（フィールド '${field.fieldId}'）→ unknown にしました。`);
@@ -146,30 +169,37 @@ function renderFields(fields, depth) {
 }
 
 // --- 出力組み立て ---
+// 型本体を先に組み立てる（このとき usesImage が確定する）→ 最後にヘッダ／import を前置する。
 const topName = pascal(opts.name || 'Content');
-const blocks = [];
-blocks.push(
-  '// AUTO-GENERATED from microCMS schema by ato-microcms-types.\n' +
-    '// id / createdAt 等は取得ラッパー側が付与するためここには含めない。\n' +
-    '// relation など unknown のままの箇所は参照先 API の型へ手で置き換える。',
-);
-blocks.push('export type MicroCMSImage = { url: string; height: number; width: number };');
+const typeBlocks = [];
 
 for (const cf of customFields) {
   if (!cf.fieldId) continue;
   const body = renderFields(Array.isArray(cf.fields) ? cf.fields : [], 1);
-  blocks.push(
+  typeBlocks.push(
     `export type ${customTypeName.get(cf.fieldId)} = {\n` +
-      `  fieldId: ${JSON.stringify(cf.fieldId)};\n` +
+      `  fieldId: ${q(cf.fieldId)};\n` +
       `${body}\n};`,
   );
 }
 
-blocks.push(`export type ${topName} = {\n${renderFields(apiFields, 1)}\n};`);
+typeBlocks.push(`export type ${topName} = {\n${renderFields(apiFields, 1)}\n};`);
 
-const output = blocks.join('\n\n') + '\n';
+// media を使う型は共通の MicroCMSImage をライブラリから import して共有する（重複定義しない）。
+const libPath = opts.lib || '@/lib/microcms/microcms';
+const head = [
+  '// AUTO-GENERATED from microCMS schema by ato-microcms-types.\n' +
+    '// id / createdAt 等は取得ラッパー側が付与するためここには含めない。\n' +
+    '// relation など unknown のままの箇所は参照先 API の型へ手で置き換える。',
+];
+if (usesImage) {
+  head.push(`import type { MicroCMSImage } from '${libPath}';`);
+}
+
+const output = [...head, ...typeBlocks].join('\n\n') + '\n';
 
 if (opts.out) {
+  mkdirSync(dirname(opts.out), { recursive: true }); // types/microcms/ が無くても掘る
   writeFileSync(opts.out, output);
   console.error(`[schema-to-types] 生成しました: ${opts.out}`);
 } else {

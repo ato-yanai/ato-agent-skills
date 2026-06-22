@@ -49,6 +49,9 @@ export type MicroCMSDate = {
 /** リスト形式コンテンツに microCMS が付与する共通フィールドを合成した型。 */
 export type MicroCMSListContent<T> = T & MicroCMSContentId & MicroCMSDate;
 
+/** media フィールドが返す画像オブジェクトの共通型（定義元）。ato-microcms-types の生成型はこれを import して共有する（各ドメイン型で重複定義しない）。 */
+export type MicroCMSImage = { url: string; height: number; width: number };
+
 /** apiFetch のうち、呼び出し側で指定したい通信オプションだけ受け渡す。 */
 export type RequestOptions = Partial<
   Pick<ApiFetchOptions, 'timeoutMs' | 'retries' | 'retryBaseMs' | 'fetchOptions' | 'signal'>

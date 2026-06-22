@@ -20,6 +20,8 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
   （サンプルレスポンスからの推論はしない。select のユニオンや media の形を正確に出すため）。
 - **生成するのは「フィールドだけ」の型。** `id` / `createdAt` / `updatedAt` 等の共通フィールドは
   ato-microcms-fetch の `MicroCMSListContent` が付与するので**型に含めない**。
+- **`MicroCMSImage` は共通型。** `media` 系で使う画像型は ato-microcms-fetch のライブラリ
+  （`@/lib/microcms/microcms`）に置き、生成型は**そこから import して共有する**（各ファイルに重複定義しない）。
 
 ## 構成
 
@@ -31,18 +33,25 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
 
 1. **スキーマ JSON を用意する。** 管理画面の「API設定 → スキーマ → エクスポート」で対象 API の
    JSON を保存してもらう（または既にあるものを受け取る）。
+   - **エンドポイント名はエクスポートファイル名から取る。** スキーマ JSON の中身にエンドポイント名は
+     入っていない。ファイル名 `api-{endpoint}-<日時>.json` の `{endpoint}` 部分が API のエンドポイント名
+     （= `endpoints.ts` に登録するキー）。例: `api-post-20260622150906.json` → `post`、型名は `Post`。
 2. **生成する。** `scripts/schema-to-types.mjs` を実行する。`--name` で型名（通常はエンドポイント名の
    PascalCase）を指定する。
    ```bash
-   node scripts/schema-to-types.mjs ./blog.schema.json --name Blog --out src/types/microcms/blog.ts
+   node scripts/schema-to-types.mjs ./api-post-20260622150906.json --name Post --out src/types/microcms/post.ts
    ```
-   `--out` 省略時は標準出力。
+   `--out` 省略時は標準出力。`--out` の親ディレクトリ（`types/microcms/` 等）が無くてもスクリプトが
+   自動で作る。`media` を使う型は共通の `MicroCMSImage` をライブラリから import する
+   （`--lib`、既定 `@/lib/microcms/microcms`）。import パスがプロジェクトと違う場合だけ `--lib` で指定する。
 3. **警告に対応する。** `relation` / `relationList` は参照先 API の型に依存し depth で形が変わるため、
-   `unknown` で出力し警告する。**参照先の型（例 `MicroCMSListContent<Author>` や `{ id: string }`）に
-   手で置き換える。** `[warn]` を読んでユーザーに伝える。
+   `unknown` で出力し警告する。**参照先の型に手で置き換える**（下の「relation の置換」を参照）。
+   `[warn]` を読んでユーザーに伝える。
 4. **配置する。** 生成物は `src/types/microcms/<endpoint>.ts`（等）に置く。ドメイン型はライブラリと
    分離する（[ato-microcms-fetch](../ato-microcms-fetch/SKILL.md) の方針と合わせる）。
-5. **endpoints.ts に登録する。** ato-microcms-fetch を使う場合、生成した型を import して
+   - **`src/` が無いプロジェクト**（root に `app/` を直置きする構成など）では、root の `types/microcms/`
+     に置く（取得ラッパーも root の `lib/` 側に合わせる）。`src/` の有無を最初に確認する。
+5. **endpoints.ts に登録する／スタブを置換する。** ato-microcms-fetch を使う場合、生成した型を import して
    `MicroCMSListEndpoints` / `MicroCMSObjectEndpoints` に追加する。
    ```ts
    import type { Blog } from '@/types/microcms/blog';
@@ -50,7 +59,16 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
      blogs: Blog;
    }
    ```
-6. **型チェックする。** `tsc --noEmit` で生成物が通ることを確認し、結果を日本語で報告する。
+   - **先にスタブ（`STUB` / `TODO(ato-microcms-types)` 印）で仮登録されていないか確認し、あれば
+     本物の型に置換する**（取得側で先にエンドポイントだけ登録するときの暫定型。
+     [ato-microcms-fetch](../ato-microcms-fetch/SKILL.md) の「型が未生成のままエンドポイントを登録する」参照）。
+   - **relation の参照先型のスタブも同様に置換する。** 例: `Post.category` 用に `PostCategory` が
+     スタブで置かれていたら、今回生成した本物に差し替える。
+   - 登録で interface が空でなくなったら、`endpoints.ts` のその行の `eslint-disable`（空 registry 用）は
+     不要になるので外す。
+6. **整形する。** スクリプトの出力は素の TS。引用符・カンマ・改行の規約はプロジェクトの
+   フォーマッタに合わせる。**Prettier 等があれば生成物にかける**（例 `npx prettier --write types/microcms/<endpoint>.ts`）。
+7. **型チェックする。** `tsc --noEmit`（あれば `lint` も）で生成物が通ることを確認し、結果を日本語で報告する。
 
 ## フィールド種別 → TS マッピング
 
@@ -61,8 +79,8 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
 | `boolean` | `boolean` | |
 | `date` | `string` | ISO 8601 文字列 |
 | `select` | `(リテラルユニオン)[]` | **単一選択でも配列で返る**。`selectItems` の value からユニオン生成 |
-| `media` | `MicroCMSImage` | `{ url; height; width }` を同時生成 |
-| `mediaList` | `MicroCMSImage[]` | |
+| `media` | `MicroCMSImage` | 共通型をライブラリから import（各ファイルに重複定義しない） |
+| `mediaList` | `MicroCMSImage[]` | 同上 |
 | `file` | `{ url: string }` | |
 | `iframe` | `Record<string, unknown>` | 拡張フィールド |
 | `relation` | `unknown`（要手修正） | 参照先 API の型へ置換。depth で形が変わる |
@@ -71,6 +89,32 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
 | `repeater` | `(カスタム型 union)[]` | 参照先カスタムフィールドのユニオン配列 |
 
 - 非 `required` フィールドは `?:`（任意）で出力する。
+
+## relation の置換（手作業の要点）
+
+`relation` / `relationList` は `unknown` で出力されるので手で置き換える。ポイントは
+**取得ラッパーは入れ子の relation には共通フィールドを自動付与しない**こと。トップレベルの
+コンテンツには `MicroCMSListContent` が `id` / `createdAt` 等を付けるが、`depth` で展開された
+参照先には付かない。そのため**参照先の本体型を自分で `MicroCMSListContent<Ref>` でラップする**。
+
+```ts
+import type { MicroCMSListContent } from '@/lib/microcms/microcms';
+import type { Category } from '@/types/microcms/category';
+
+export type Post = {
+  title: string;
+  // depth>=1 で展開され、参照先にも id/createdAt 等が付くので MicroCMSListContent でラップ
+  category: MicroCMSListContent<Category>;        // relation
+  // relationList は配列
+  // tags: MicroCMSListContent<Tag>[];             // relationList
+  // depth=0（参照を展開しない）なら ID だけ
+  // category: { id: string };
+};
+```
+
+- 参照先の型（例 `Category`）は、その API のスキーマからこのスキルで別途生成する。
+- **参照先のスタブを空 `{}` で置かない。** `@typescript-eslint/no-empty-object-type` で lint が落ちる。
+  最低 1 フィールド（例 `{ name: string }`）か、暫定なら `Record<string, unknown>` を入れる。
 
 ## Examples
 
@@ -84,7 +128,8 @@ microCMS の **API スキーマ JSON** から、コンテンツの **TypeScript 
 ```
 **出力:**
 ```ts
-export type MicroCMSImage = { url: string; height: number; width: number };
+// MicroCMSImage はライブラリの共通型を import して共有する（各ファイルに重複定義しない）。
+import type { MicroCMSImage } from '@/lib/microcms/microcms';
 
 export type Blog = {
   title: string;
@@ -97,6 +142,11 @@ export type Blog = {
 
 - **relation / relationList** → 参照先 API の型は別スキーマなので自動解決できない。`unknown` で出し、
   参照先の型へ手で置換する。取得時 `depth` が 0 なら `{ id: string }`、1 以上なら参照先の本体になる。
+  **入れ子の参照先には共通フィールドが自動付与されないので `MicroCMSListContent<Ref>` でラップする**
+  （上の「relation の置換」参照）。
+- **custom（単一カスタムフィールド）** → `customFieldCreatedAt`（単数）で 1 つの customField を参照する。
+  repeater の `customFieldCreatedAtList`（複数）と別物だが、スクリプトは両対応済み。参照先を JSON から
+  特定できた場合は単一型に解決し（union にしない）、できない場合のみ全 customField の union + 警告。
 - **select は常に配列** → 単一選択でも `string[]` 相当で返る microCMS 仕様に合わせている。
 - **repeater / custom** → `customFields` から型を生成し union 化する。参照先を JSON から特定できない場合は
   全 customField の union にして警告する（必要なら手で絞る）。
