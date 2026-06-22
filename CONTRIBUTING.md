@@ -95,6 +95,6 @@ allowed-tools: Read Bash     # 任意・実験的
 
 - [ ] `name` がディレクトリ名と一致している
 - [ ] `description` に「何をする／いつ使う」が入っている
-- [ ] `npx skills add git@github.com:your-org/agent-skills.git --list` で意図どおり一覧に出る
+- [ ] `npx skills add ato-yanai/ato-agent-skills --list` で意図どおり一覧に出る
 - [ ] `AGENTS.md` の収録スキル表に 1 行追記した
 - [ ] 信頼できない外部取得や不審な処理を含めていない
