@@ -22,6 +22,7 @@
 | [ato-fetch-client](skills/ato-fetch-client/SKILL.md) | 標準 fetch だけで作る汎用 REST API クライアント（タイムアウト・リトライ・型付きエラー）を導入する |
 | [ato-microcms-fetch](skills/ato-microcms-fetch/SKILL.md) | microCMS のコンテンツを SDK 不使用・fetch だけで取得する TypeScript ライブラリ（リスト／詳細／全件）を導入する。ato-fetch-client を土台にする |
 | [ato-microcms-types](skills/ato-microcms-types/SKILL.md) | microCMS の API スキーマ JSON から TypeScript 型定義を生成する。ato-microcms-fetch の endpoints.ts に登録して使う |
+| [ato-microcms-webhook](skills/ato-microcms-webhook/SKILL.md) | microCMS Webhook を受け、署名検証（HMAC-SHA256）して Next.js のオンデマンド再検証（revalidateTag）を叩く。ato-microcms-fetch のタグ規約と対で動く |
 
 ## 規約
 

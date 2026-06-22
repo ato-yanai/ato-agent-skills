@@ -175,6 +175,10 @@ await getListDetail('blogs', id, undefined, { fetchOptions: { cache: 'no-store' 
 
 - **Astro:** SSG（ビルド時取得）は `await` するだけ。SSR で都度取得したいときは
   `fetchOptions: { cache: 'no-store' }` を渡す。
+- **更新を自動反映したいとき（タグ規約）:** タグは一覧に `[api]`、詳細に `[api, `${api}:${id}`]` を付ける
+  （例 `['blogs']` / `['blogs', `blogs:${id}`]`）。この規約で付けておくと、コンテンツ更新時に
+  [ato-microcms-webhook](../ato-microcms-webhook/SKILL.md) が同じタグを `revalidateTag` で剥がし、
+  一覧・詳細を再生成できる（貼る側＝本スキル、剥がす側＝webhook）。
 
 ## 通信で考慮済みの点
 
