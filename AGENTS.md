@@ -17,7 +17,8 @@
 
 | スキル | 説明 |
 | --- | --- |
-| [git-commit-message](skills/git-commit-message/SKILL.md) | Conventional Commits 準拠のコミットメッセージを書く／レビューする |
+| [ato-git-commit-message](skills/ato-git-commit-message/SKILL.md) | Conventional Commits 準拠のコミットメッセージを書く／レビューする |
+| [ato-eslint-prettier-setup](skills/ato-eslint-prettier-setup/SKILL.md) | プロジェクトを検出して ESLint + Prettier（Next.js / Astro / Tailwind 等）を自動セットアップする |
 
 ## 規約
 

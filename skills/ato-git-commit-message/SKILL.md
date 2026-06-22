@@ -1,5 +1,5 @@
 ---
-name: git-commit-message
+name: ato-git-commit-message
 description: Conventional Commits 準拠のコミットメッセージを書く・レビューする。ユーザーがコミットメッセージの作成や修正を求めたとき、git commit の文面を整えたいとき、変更内容からメッセージを生成したいとき、コミット履歴やメッセージ規約を整備したいときに使う。
 license: MIT
 metadata:

@@ -8,7 +8,7 @@
 - **`references/` に分割しない。説明・詳細・早見表はすべて `SKILL.md` 本文に書く。**
   別ファイルへの分割は段階読み込みの手間を増やすだけなので、このリポジトリでは行わない。
 - **`Co-Authored-By:` などの共同編集者トレーラー・ツール署名をコミットに付けない。**
-  単独の作者として書く（詳細は [git-commit-message](skills/git-commit-message/SKILL.md)）。
+  単独の作者として書く（詳細は [ato-git-commit-message](skills/ato-git-commit-message/SKILL.md)）。
 
 ## 1. ディレクトリ構成
 

@@ -25,9 +25,12 @@ ato-agent-skills/
 ├── AGENTS.md            ← リポジトリ全体の索引（汎用 AI 用エントリポイント）
 ├── CONTRIBUTING.md      ← スキルの書き方・規約
 ├── skills/              ← スキル本体（1ディレクトリ = 1スキル、npx skills が自動検出）
-│   └── git-commit-message/
+│   ├── ato-git-commit-message/
+│   │   └── SKILL.md
+│   └── ato-eslint-prettier-setup/
 │       ├── SKILL.md
-│       └── references/
+│       ├── scripts/     ← 検出スクリプト（detect.mjs）
+│       └── assets/      ← eslint / prettier / vscode のテンプレ
 └── templates/
     └── skill-template/  ← 新規スキルのひな形
 ```
@@ -51,10 +54,10 @@ npx skills add ato-yanai/ato-agent-skills --list
 
 ```bash
 # 1つだけ
-npx skills add ato-yanai/ato-agent-skills -s git-commit-message
+npx skills add ato-yanai/ato-agent-skills -s ato-git-commit-message
 
 # 複数指定 + インストール先エージェントを指定 + グローバル(~/.claude/skills 等)へ
-npx skills add ato-yanai/ato-agent-skills -s git-commit-message -a claude-code -g
+npx skills add ato-yanai/ato-agent-skills -s ato-git-commit-message -a claude-code -g
 
 # 全部を非対話で取り込む
 npx skills add ato-yanai/ato-agent-skills --all
@@ -77,10 +80,10 @@ npx skills add ato-yanai/ato-agent-skills --all
 npx skills update
 
 # 特定スキルだけ
-npx skills update git-commit-message
+npx skills update ato-git-commit-message
 
 # 複数指定
-npx skills update git-commit-message another-skill
+npx skills update ato-git-commit-message another-skill
 
 # 非対話（カレントがプロジェクトなら project、なければ global を自動判定）
 npx skills update -y
@@ -116,8 +119,8 @@ npx skills update -p    # プロジェクトの .claude/skills だけ
 ### `add` — 取り込む
 
 ```bash
-npx skills add <source> -s git-commit-message          # 1つだけ
-npx skills add <source> -s git-commit-message -a claude-code -g  # エージェント指定＋グローバル
+npx skills add <source> -s ato-git-commit-message          # 1つだけ
+npx skills add <source> -s ato-git-commit-message -a claude-code -g  # エージェント指定＋グローバル
 npx skills add <source> --all                          # 全部を非対話で
 npx skills add <source> --list                         # 入れずに一覧だけ
 ```
@@ -163,8 +166,8 @@ npx skills list -a claude-code   # 特定エージェントで絞り込み
 ### `remove` (`rm`) — 削除
 
 ```bash
-npx skills remove git-commit-message
-npx skills remove -s git-commit-message -a claude-code -g
+npx skills remove ato-git-commit-message
+npx skills remove -s ato-git-commit-message -a claude-code -g
 npx skills remove --all                # 全エージェントから全削除（非対話）
 ```
 
