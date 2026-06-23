@@ -1,7 +1,7 @@
 <!--
 microCMS設計書テンプレート。コンテンツモデル＝データ側の正。
 フィールド種別/型は ato-microcms-types、取得条件は ato-microcms-fetch、Webhookは ato-microcms-webhook に合わせる。
-採番: 接頭辞 CM（1 API = 1 CM）。絞り込み/ソートに使うフィールドをここで確定する。
+採番: 接頭辞 CMS（=コンテンツモデル。1 API = 1 CMS）。絞り込み/ソートに使うフィールドをここで確定する。
 -->
 
 # microCMS設計書 — <案件名>
@@ -16,15 +16,15 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 
 ## API一覧
 
-| CM | エンドポイント | 種別 | 概要 | 関連機能(FN) |
+| CMS | エンドポイント | 種別 | 概要 | 関連機能(FUNC) |
 | --- | --- | --- | --- | --- |
-| CM-002 | `news` | リスト | ニュース記事 | FN-010〜020 |
-| CM-008 | `blog` | リスト | ブログ記事 | FN-110 |
-| CM-050 | `site-settings` | オブジェクト | サイト共通設定 | — |
+| CMS-002 | `news` | リスト | ニュース記事 | FUNC-010〜020 |
+| CMS-008 | `blog` | リスト | ブログ記事 | FUNC-110 |
+| CMS-050 | `site-settings` | オブジェクト | サイト共通設定 | — |
 
 ---
 
-## CM-002 `news`（リスト形式）
+## CMS-002 `news`（リスト形式）
 
 ### フィールド定義
 
@@ -42,13 +42,13 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 
 ### 取得条件
 
-| 用途 | 画面(SC) | filters | orders | limit | offset | depth |
+| 用途 | 画面(PAGE) | filters | orders | limit | offset | depth |
 | --- | --- | --- | --- | --- | --- | --- |
-| 一覧 | SC-003 | `category[equals]{id}`（絞り込み時） | `-publishedAt` / `publishedAt` | 12 | (page-1)*12 | 1 |
-| TOP新着 | SC-001 | publishState=公開 | `-publishedAt` | 3 | 0 | 1 |
-| 詳細 | SC-004 | — | — | — | — | 1 |
+| 一覧 | PAGE-003 | `category[equals]{id}`（絞り込み時） | `-publishedAt` / `publishedAt` | 12 | (page-1)*12 | 1 |
+| TOP新着 | PAGE-001 | publishState=公開 | `-publishedAt` | 3 | 0 | 1 |
+| 詳細 | PAGE-004 | — | — | — | — | 1 |
 
-- クエリパラメータ → filters/orders への変換規約は共通処理設計書 CP-005 を参照。
+- クエリパラメータ → filters/orders への変換規約は共通処理設計書 COMMON-005 を参照。
 
 ### 権限・公開ワークフロー
 
@@ -58,6 +58,8 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 | 管理者 | 公開・予約公開・削除 | |
 
 - 公開フロー: 下書き → レビュー → 公開（予約公開あり）。下書きはプレビューでのみ閲覧。
+- ロールの全体定義・APIキー（種別/権限スコープ/用途）は サービス設定として `CMS-050 site-settings` の章にまとめる。
+  **キー値・Webhookシークレットの実値は書かない**（`.env`/環境変数名など参照先のみ。NFR-05）。
 
 ### Webhook / 再検証
 
@@ -69,9 +71,9 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 
 ---
 
-## CM-008 `blog`（リスト形式）
+## CMS-008 `blog`（リスト形式）
 
-> 絞り込み軸が news と異なる（カテゴリ・タグ・公開日）。仕組みは CP-005 を共有する。
+> 絞り込み軸が news と異なる（カテゴリ・タグ・公開日）。仕組みは COMMON-005 を共有する。
 
 | fieldId | 表示名 | kind | 必須 | 絞り込み | ソート | 説明 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -80,4 +82,4 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 | tags | タグ | relationList | – | ✓ | – | 複数 |
 | publishedAt | 公開日 | date | ✓ | ✓(範囲) | ✓ | from/to で範囲絞り込み |
 
-（取得条件・権限・Webhook は CM-002 に倣って記述）
+（取得条件・権限・Webhook は CMS-002 に倣って記述）
