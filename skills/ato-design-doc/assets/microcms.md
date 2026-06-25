@@ -2,6 +2,7 @@
 microCMS設計書テンプレート。コンテンツモデル＝データ側の正。
 フィールド種別/型は ato-microcms-types、取得条件は ato-microcms-fetch、Webhookは ato-microcms-webhook に合わせる。
 採番: 接頭辞 CMS（=コンテンツモデル。1 API = 1 CMS）。絞り込み/ソートに使うフィールドをここで確定する。
+文字数・形式・一意性・メディアの制約は、フィールド定義の「制約」列で確定する（検証可能なものは AC 化）。
 -->
 
 # microCMS設計書 — <案件名>
@@ -30,25 +31,19 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 
 > kind / 型は ato-microcms-types のマッピングに合わせる。「絞り込み/ソート」列で一覧機能の軸を確定する。
 
-| fieldId | 表示名 | kind | TS型 | 必須 | 絞り込み | ソート | 説明 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| title | タイトル | text | string | ✓ | – | – | |
-| category | カテゴリ | relation | `MicroCMSListContent<NewsCategory>` | ✓ | ✓ | – | depth=1 で展開 |
-| publishedAt | 公開日 | date | string | ✓ | – | ✓ | ISO 8601 |
-| thumbnail | サムネイル | media | `MicroCMSImage` | – | – | – | |
-| body | 本文 | richEditorV2 | string | ✓ | – | – | HTML文字列 |
+| fieldId | 表示名 | kind | TS型 | 必須 | 制約 | 絞り込み | ソート | 説明 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| title | タイトル | text | string | ✓ | 60字以内 | – | – | |
+| category | カテゴリ | relation | `MicroCMSListContent<NewsCategory>` | ✓ | – | ✓ | – | depth=1 で展開 |
+| publishedAt | 公開日 | date | string | ✓ | ISO 8601 | – | ✓ | |
+| thumbnail | サムネイル | media | `MicroCMSImage` | – | – | – | – | |
+| body | 本文 | richEditorV2 | string | ✓ | – | – | – | HTML文字列 |
 
 - 共通フィールド（`id`/`createdAt`/`updatedAt`/`publishedAt`/`revisedAt`）は取得ラッパーが付与（型に含めない）。
-
-### 取得条件
-
-| 用途 | 画面(PAGE) | filters | orders | limit | offset | depth |
-| --- | --- | --- | --- | --- | --- | --- |
-| 一覧 | PAGE-003 | `category[equals]{id}`（絞り込み時） | `-publishedAt` / `publishedAt` | 12 | (page-1)*12 | 1 |
-| TOP新着 | PAGE-001 | publishState=公開 | `-publishedAt` | 3 | 0 | 1 |
-| 詳細 | PAGE-004 | — | — | — | — | 1 |
-
-- クエリパラメータ → filters/orders への変換規約は共通処理設計書 COMMON-005 を参照。
+- **制約列** ＝ 入稿時バリデーション（文字数・形式・一意性など。microCMS のフィールド設定に対応）。**microCMS の機能で担保されるため、ここでは AC を設けない**（サイト側の挙動や入力フォームの検証は page / COMMON-010 の AC が持つ）。
+- **一意性**が必要なフィールド（slug 等）は microCMS の「重複を許可しない」を有効化し、制約列に「一意」と記す（本例は `[id]`＝コンテンツIDを使うため slug を持たない）。
+- **メディア（画像・ファイル）の形式・サイズは既定で制限しない。** 要件があるフィールドだけ制約列に推奨/最大サイズ・許可形式を書く（例: `推奨1200×630・JPG/PNG/WebP・2MBまで`）。
+- 各画面の**取得条件**（filters/orders/limit/offset/depth）はページ設計書の「データ取得」節が持つ（変換規約は COMMON-005）。
 
 ### 権限・公開ワークフロー
 
@@ -75,11 +70,11 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 
 > 絞り込み軸が news と異なる（カテゴリ・タグ・公開日）。仕組みは COMMON-005 を共有する。
 
-| fieldId | 表示名 | kind | 必須 | 絞り込み | ソート | 説明 |
-| --- | --- | --- | --- | --- | --- | --- |
-| title | タイトル | text | ✓ | – | – | |
-| category | カテゴリ | relation | ✓ | ✓ | – | |
-| tags | タグ | relationList | – | ✓ | – | 複数 |
-| publishedAt | 公開日 | date | ✓ | ✓(範囲) | ✓ | from/to で範囲絞り込み |
+| fieldId | 表示名 | kind | 必須 | 制約 | 絞り込み | ソート | 説明 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| title | タイトル | text | ✓ | 60字以内 | – | – | |
+| category | カテゴリ | relation | ✓ | – | ✓ | – | |
+| tags | タグ | relationList | – | – | ✓ | – | 複数 |
+| publishedAt | 公開日 | date | ✓ | ISO 8601 | ✓(範囲) | ✓ | from/to で範囲絞り込み |
 
-（取得条件・権限・Webhook は CMS-002 に倣って記述）
+（権限・Webhook は CMS-002 に倣って記述。具体的な取得条件は各ページ設計書へ）
