@@ -23,6 +23,7 @@
 | COMMON-006 | ページネーション機構 | URL生成・offset計算・境界・範囲外の扱い | FUNC-013, PAGE-003/PAGE-012 |
 | COMMON-007 | 一覧META生成（ページNo付与） | title/canonical/prev/next の生成規則 | FUNC-014, 一覧系PAGE |
 | COMMON-008 | エラーページ | 404/500 の表示と分岐 | PAGE-900/PAGE-901 |
+| COMMON-009 | リッチテキストレンダリング | 許可タグ・クラス allowlist・XSSサニタイズ規約 | richEditorV2 を持つ全CMS・全PAGE |
 | COMMON-010 | フォーム送信 | 入力検証・送信・完了/失敗分岐 | FUNC-200, PAGE-020 |
 
 ---
@@ -89,3 +90,37 @@
 ## COMMON-008 エラーページ / COMMON-010 フォーム送信
 
 （404/500 の分岐・表示、フォームの入力検証・送信・完了/失敗分岐を同様に記述。各仕様に AC を併記する）
+
+---
+
+## COMMON-009 リッチテキストレンダリング（サニタイズ規約）
+
+### 仕様
+
+richEditorV2 フィールドを HTML としてレンダリングする際の XSS サニタイズ規約。
+**許可タグ・出力属性・カスタムクラスの定義は microcms.md の各フィールド「リッチエディタ設定」節が正**。
+フロントの `allowedTags` / `allowedAttributes` / `allowedClasses` をその表と一致させる。
+
+#### セキュリティ不変条件（フィールド設定によらず常に適用）
+
+- `script`・`style`・`link`・`noscript` タグはタグごと除去。
+- `on*` 属性・`style` 属性・`javascript:` URI はすべて除去。
+- `target="_blank"` のリンクには `rel="noopener noreferrer"` を自動付与。
+- `<img src>` は microCMS CDN オリジン のみ許可。外部オリジン画像は除去。
+- `<iframe src>` を有効にする場合は許可ドメイン（YouTube 等）を明示指定すること。
+- `class` 属性は microcms.md に登録したカスタムクラス allowlist のみ許可（任意クラス通過はスタイル注入リスクあり）。
+
+#### 実装
+
+- ライブラリ: `sanitize-html`（サーバーサイド）または `DOMPurify`（クライアントサイド）。
+- 設定は microcms.md の各フィールド「リッチエディタ設定」表から `allowedTags` / `allowedAttributes` / `allowedClasses` を生成する。
+
+### 受け入れ基準(AC)
+
+| AC | 内容 |
+| --- | --- |
+| AC-031 | `<script>alert(1)</script>` が含まれる HTML を渡してもスクリプトが実行されない |
+| AC-032 | `<a onclick="evil()">` の `onclick` は除去され、リンクテキストのみレンダリングされる |
+| AC-033 | `target="_blank"` のリンクに `rel="noopener noreferrer"` が自動付与される |
+| AC-034 | フィールド設定にないカスタムクラス（例: `z-[9999]`）は除去されてレンダリングされる |
+| AC-035 | microCMS CDN 外の `<img src>` は除去される |
