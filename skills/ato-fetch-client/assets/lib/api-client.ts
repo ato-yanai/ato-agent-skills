@@ -170,6 +170,7 @@ export async function apiFetch<T>(baseUrl: string, options: ApiFetchOptions = {}
       });
     } catch (error) {
       if (error instanceof HttpError) throw error; // リトライ不可の HTTP エラー
+      if (signal?.aborted) throw error; // 呼び出し側のキャンセルはリトライせず即時伝播
       lastError = error; // ネットワーク断・タイムアウト等
       if (attempt < maxRetries) {
         await sleep(backoffMs(attempt, retryBaseMs));
