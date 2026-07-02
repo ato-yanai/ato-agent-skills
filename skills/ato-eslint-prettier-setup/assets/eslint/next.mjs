@@ -12,6 +12,8 @@ const __dirname = dirname(__filename);
 const compat = new FlatCompat({ baseDirectory: __dirname });
 
 export default [
+  // ESLint 9 はドットディレクトリを自動無視しないため、ビルド成果物を明示的に除外する
+  { ignores: ['.next/**', 'out/**', 'build/**', 'next-env.d.ts'] },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
   eslintConfigPrettier,
 ];
