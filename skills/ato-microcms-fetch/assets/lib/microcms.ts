@@ -85,8 +85,52 @@ function get<T>(
   return apiFetch<T>(url, {
     headers: { 'X-MICROCMS-API-KEY': apiKey },
     query: normalizeQueries(queries),
+    sensitiveQueryParams: ['draftKey'], // HttpError の URL で伏字化（ログ経由の漏洩防止）
     ...options,
   });
+}
+
+// ─────────────────────────────────────────────
+// キャッシュタグ（貼る側）
+// webhook 側（ato-microcms-webhook の revalidateTargetsFor）が剥がすタグと対の契約。
+// 手書きせずこのヘルパーを使うことで、タグの書き間違いによる再検証漏れを防ぐ。
+// ─────────────────────────────────────────────
+
+/** 一覧・オブジェクト取得に貼るタグ: `[api]`。 */
+export function listTags(endpoint: ListEndpoint | ObjectEndpoint): string[] {
+  return [endpoint];
+}
+
+/** 詳細取得に貼るタグ: `[api, `${api}:${id}`]`（一覧タグ＋個別タグ）。 */
+export function detailTags(endpoint: ListEndpoint, contentId: string): string[] {
+  return [endpoint, `${endpoint}:${contentId}`];
+}
+
+// ─────────────────────────────────────────────
+// Image API
+// ─────────────────────────────────────────────
+
+/** microCMS Image API（imgix 互換）の主要パラメータ。他のパラメータも文字列/数値で渡せる。 */
+export type MicroCMSImageParams = {
+  /** 横幅(px) */ w?: number;
+  /** 高さ(px) */ h?: number;
+  /** リサイズ方法（例 'crop'） */ fit?: string;
+  /** 品質 1–100 */ q?: number;
+  /** 出力フォーマット（例 'webp'） */ fm?: string;
+  /** デバイスピクセル比 */ dpr?: number;
+} & Record<string, string | number | undefined>;
+
+/**
+ * microCMS の画像 URL（images.microcms-assets.io）に Image API パラメータを付与する。
+ * next/image の loader や <img srcset> の生成に使う。
+ */
+export function buildImageUrl(url: string, params: MicroCMSImageParams): string {
+  const u = new URL(url);
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    u.searchParams.set(key, String(value));
+  }
+  return u.toString();
 }
 
 /** リスト取得: GET /api/v1/{endpoint} */

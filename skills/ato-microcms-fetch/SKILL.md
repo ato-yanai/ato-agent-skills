@@ -40,7 +40,7 @@ URL 組立・型付けに専念する。
 
 | ファイル | 役割 |
 | --- | --- |
-| `microcms.ts` | microCMS 層。`getList` / `getListDetail` / `getAllContents` / `getObject` と型定義（`MicroCMSListContent` / `MicroCMSImage` 等の共通型を提供）。`./api-client` を import。 |
+| `microcms.ts` | microCMS 層。`getList` / `getListDetail` / `getAllContents` / `getObject` と型定義（`MicroCMSListContent` / `MicroCMSImage` 等の共通型）、タグヘルパー（`listTags` / `detailTags`）、Image API ヘルパー（`buildImageUrl`）を提供。`./api-client` を import。 |
 | `endpoints.ts` | **エンドポイント名 → コンテンツ型のマップ**。ここに登録した名前だけが各関数で受け付けられ、戻り値の型も自動で決まる。 |
 | `env.ts` | 必須環境変数（`MICROCMS_SERVICE_DOMAIN` / `MICROCMS_API_KEY`）の検証。 |
 | `api-client.ts` | （[ato-fetch-client](../ato-fetch-client/SKILL.md) が配置）汎用 fetch ラッパー。 |
@@ -118,8 +118,9 @@ list.contents[0].title; // string ✓   list.totalCount / offset / limit
 const post = await getListDetail('blogs', 'CONTENT_ID', { depth: 2 });
 post.body; // string ✓
 
-// 下書きプレビュー
-const draft = await getListDetail('blogs', 'CONTENT_ID', { draftKey: 'xxxx' });
+// 下書きプレビュー（Next.js ではキャッシュに乗せない。乗ると下書きの更新が反映されない）
+const draft = await getListDetail('blogs', 'CONTENT_ID', { draftKey: 'xxxx' },
+  { fetchOptions: { cache: 'no-store' } });
 
 // 全件取得（totalCount まで自動ループ。最大件数も指定可）
 const all = await getAllContents('news', { filters: 'category[equals]news' });
@@ -175,10 +176,42 @@ await getListDetail('blogs', id, undefined, { fetchOptions: { cache: 'no-store' 
 
 - **Astro:** SSG（ビルド時取得）は `await` するだけ。SSR で都度取得したいときは
   `fetchOptions: { cache: 'no-store' }` を渡す。
-- **更新を自動反映したいとき（タグ規約）:** タグは一覧に `[api]`、詳細に `[api, `${api}:${id}`]` を付ける
-  （例 `['blogs']` / `['blogs', `blogs:${id}`]`）。この規約で付けておくと、コンテンツ更新時に
+- **更新を自動反映したいとき（タグ規約）:** タグは一覧・`getObject` に `[api]`、詳細に `[api, `${api}:${id}`]` を
+  付ける。**手書きせず `microcms.ts` のヘルパーを使う**（書き間違いによる再検証漏れを防ぐ）:
+
+  ```ts
+  import { getList, getListDetail, listTags, detailTags } from '@/lib/microcms/microcms';
+
+  await getList('blogs', { limit: 10 }, {
+    fetchOptions: { next: { revalidate: 60, tags: listTags('blogs') } },      // ['blogs']
+  });
+  await getListDetail('blogs', id, undefined, {
+    fetchOptions: { next: { tags: detailTags('blogs', id) } },                // ['blogs', `blogs:${id}`]
+  });
+  ```
+
+  この規約で付けておくと、コンテンツ更新時に
   [ato-microcms-webhook](../ato-microcms-webhook/SKILL.md) が同じタグを `revalidateTag` で剥がし、
-  一覧・詳細を再生成できる（貼る側＝本スキル、剥がす側＝webhook）。
+  一覧・詳細を再生成できる（貼る側＝本スキルのヘルパー、剥がす側＝webhook の `revalidateTargetsFor`）。
+
+## 画像（Image API）
+
+media フィールドの画像 URL（`images.microcms-assets.io`）には Image API（imgix 互換）の
+クエリパラメータで変換を指示できる。`microcms.ts` の `buildImageUrl` を使う:
+
+```ts
+import { buildImageUrl } from '@/lib/microcms/microcms';
+
+buildImageUrl(post.eyecatch.url, { w: 800, fm: 'webp', q: 75 });
+// => https://images.microcms-assets.io/...?w=800&fm=webp&q=75
+
+// next/image の loader として使う例
+const microCMSLoader = ({ src, width, quality }: ImageLoaderProps) =>
+  buildImageUrl(src, { w: width, q: quality ?? 75, fm: 'webp' });
+```
+
+主要パラメータ: `w`/`h`（サイズ）・`fit`（リサイズ方法）・`q`（品質 1–100）・`fm`（`webp` 等）・`dpr`。
+設計書（ato-design-doc の microCMS 設計書「画像・メディア」節）のパラメータ表とここの実装を対応させる。
 
 ## 通信で考慮済みの点
 
@@ -204,6 +237,9 @@ await getListDetail('blogs', id, undefined, { fetchOptions: { cache: 'no-store' 
 - **全件取得が重い / 件数が多い** → `getAllContents` は直列ループ。`fields` で必要列に絞り、
   `maxContents` で上限を設ける。レート制限（429）はラッパーが自動でバックオフ再試行する。
 - **下書きプレビュー** → `draftKey` を渡す。プレビュー経路は必ずサーバ側で実行し、キーを露出しない。
+  Next.js では **`fetchOptions: { cache: 'no-store' }` を必ず併用する**（Data Cache に乗ると下書きの
+  更新が revalidate まで反映されない）。なお `draftKey` はクエリに載るが、`HttpError` の URL では
+  自動で伏字化される（`sensitiveQueryParams` 指定済み）。
 - **API キーが漏れる** → `NEXT_PUBLIC_` / `PUBLIC_` を付けていないか、クライアントコンポーネントから
   呼んでいないかを確認。取得はサーバ（Server Component / route handler / build 時）で行う。
 - **環境変数未設定** → `env.ts` が起動時に分かりやすい日本語エラーを投げる。`.env.local` を確認する。
