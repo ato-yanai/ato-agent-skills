@@ -21,7 +21,7 @@ metadata:
 ## 禁止事項（絶対に守る）
 
 - **`Co-Authored-By:` などの共同編集者トレーラーを付けない。** 「Claude」「Anthropic」を含む Co-Authored-By や、`🤖 Generated with ...` 等のツール署名・宣伝行をコミットメッセージに**一切入れない**。単独の作者として書く。
-- **説明部分を英語で書かない。** subject の説明・body・フッターの文章はすべて**日本語**で書く（`<type>(scope)` ラベルや `BREAKING CHANGE:` / `Closes:` などの規約キーワードのみ英語のまま）。
+- **説明部分を英語で書かない。** subject の説明・body・フッターの文章はすべて**日本語**で書く（`<type>(scope)` ラベルや `BREAKING CHANGE:` / `Closes:` などの規約キーワード、および `git revert` が自動生成する `This reverts commit <hash>.` 行のみ英語のまま）。
 
 ## 手順
 
@@ -29,6 +29,7 @@ metadata:
 2. 変更が複数の目的にまたがっていれば、**コミット分割を先に提案**する。
 3. 主目的に合う **type** を選ぶ（下の「type の選び方」を参照）。
 4. 影響範囲が **1 語**で言えるなら `type(scope):` を付ける（例 `fix(auth):`）。**scope の表記はプロジェクト内で統一**する（`auth` と `authentication` を混在させない）。1 語で言い切れないなら付けない。
+   - **他のスキルや運用ルールが type/scope を固定している場合はそちらを優先する**（例: 設計書提出は `chore(design)`、テスト提出は `chore(test)` 固定）。決定木より運用の一貫性が優先。
 5. **subject** を日本語で簡潔に要約する（type と scope は英語のまま）。
    - 末尾に句点（。）を付けない
    - 全角25／半角50文字以内を目安（70 を超えると `git log --oneline` で切れる）
