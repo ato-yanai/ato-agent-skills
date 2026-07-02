@@ -93,7 +93,8 @@ function githubFetch<T>(path: string, opts = {}) {
 | `retries` | `3` | リトライ回数（初回除く）。`0` で無効 |
 | `retryBaseMs` | `500` | バックオフ基準待ち時間 |
 | `fetchOptions` | `{}` | `fetch` へ透過（`cache` / `next` 等） |
-| `signal` | – | 呼び出し側の中断シグナル（タイムアウトと統合） |
+| `signal` | – | 呼び出し側の中断シグナル（タイムアウトと統合。abort 時はリトライせず即時伝播） |
+| `sensitiveQueryParams` | – | エラーメッセージ・`HttpError.url` で値を伏字化するクエリキー（例 `['draftKey']`）。URL に秘密が載る API で指定する |
 
 ## API 通信で考慮すべきこと（api-client.ts が面倒を見る）
 
@@ -105,7 +106,8 @@ function githubFetch<T>(path: string, opts = {}) {
 - **クエリ組立**: `URLSearchParams` で安全にエンコード（日本語も可）。
 - **キャッシュ/再検証**: `fetchOptions` をそのまま `fetch` へ。Next.js の `next:{revalidate,tags}` や
   `cache:'no-store'` を利用側で渡せる。
-- **ログ衛生**: 認証情報をログ・エラーに含めない（URL とステータスのみ）。
+- **ログ衛生**: 認証情報をログ・エラーに含めない（URL とステータスのみ）。クエリに秘密が載る API
+  （プレビュートークン等）は `sensitiveQueryParams` を指定すると `HttpError` 内の URL で伏字化される。
 
 ## 利用側が担うこと（このスキルには入れない）
 
@@ -117,7 +119,8 @@ function githubFetch<T>(path: string, opts = {}) {
 
 - **`AbortSignal.any` 非対応ランタイム** → 呼び出し側 `signal` とタイムアウトの統合ができない環境では
   タイムアウトを優先する（実装側でフォールバック済み）。
-- **204 No Content / 空ボディ** → `undefined` を返す（`res.json()` で落ちない）。
-- **JSON でないレスポンス** → エラー時はテキストとして `HttpError.body` に格納する。
+- **204 No Content / 空ボディ** → `undefined` を返す（204 以外の 2xx でも空ボディなら同様。`res.json()` で落ちない）。
+- **JSON でないレスポンス** → エラー時はテキストとして `HttpError.body` に格納する。2xx で JSON でない
+  場合は通信成功のため**リトライせず** `HttpError`（`statusText: 'Unexpected non-JSON response'`、body にテキスト）を投げる。
 - **POST/PUT を使う** → 非冪等なので、自動リトライの重複実行リスクを理解した上で `retries` を調整する。
 - **古いランタイム** → `fetch` / `AbortSignal.timeout` は Node 18+ が必要。古ければ更新を促す。

@@ -33,6 +33,8 @@ export type ApiFetchOptions = {
   fetchOptions?: NextFetchOptions;
   /** 呼び出し側からの中断シグナル（タイムアウトと統合される）。 */
   signal?: AbortSignal;
+  /** エラーメッセージ・HttpError.url で値を伏字化するクエリキー（例 ['draftKey']）。 */
+  sensitiveQueryParams?: string[];
 };
 
 export class HttpError extends Error {
@@ -71,6 +73,20 @@ function buildUrl(baseUrl: string, query?: QueryParams): string {
 
 function isRetriableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
+}
+
+/** URL 中のセンシティブなクエリ値を伏字化する（エラーメッセージ・ログはこちらを使う）。 */
+function maskUrl(url: string, keys?: string[]): string {
+  if (!keys?.length) return url;
+  try {
+    const u = new URL(url);
+    for (const key of keys) {
+      if (u.searchParams.has(key)) u.searchParams.set(key, '***');
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 /** Retry-After（秒 or HTTP-date）/ X-RateLimit-Reset（Unix 秒）を待ち時間(ms)へ。 */
@@ -128,9 +144,11 @@ export async function apiFetch<T>(baseUrl: string, options: ApiFetchOptions = {}
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
     fetchOptions = {},
     signal,
+    sensitiveQueryParams,
   } = options;
 
   const url = buildUrl(baseUrl, query);
+  const safeUrl = maskUrl(url, sensitiveQueryParams); // エラー・ログ用（実リクエストは url を使う）
   const finalHeaders: Record<string, string> = { ...headers };
   let serializedBody: BodyInit | undefined;
   if (body !== undefined) {
@@ -154,7 +172,19 @@ export async function apiFetch<T>(baseUrl: string, options: ApiFetchOptions = {}
 
       if (res.ok) {
         if (res.status === 204) return undefined as T;
-        return (await res.json()) as T;
+        const text = await res.text();
+        if (!text) return undefined as T; // 204 以外でも空ボディは undefined
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          // 2xx だが JSON でない。通信自体は成功しているためリトライしない。
+          throw new HttpError({
+            status: res.status,
+            statusText: 'Unexpected non-JSON response',
+            url: safeUrl,
+            body: text,
+          });
+        }
       }
 
       const errorBody = await readBody(res);
@@ -165,7 +195,7 @@ export async function apiFetch<T>(baseUrl: string, options: ApiFetchOptions = {}
       throw new HttpError({
         status: res.status,
         statusText: res.statusText,
-        url,
+        url: safeUrl,
         body: errorBody,
       });
     } catch (error) {
