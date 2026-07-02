@@ -43,7 +43,7 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 | 種別 | GET | Write | 用途 |
 | --- | --- | --- | --- |
 | GETのみ | ✓ | – | フロントエンド読み取り（公開用） |
-| GET + Write | ✓ | ✓ | ISR 手動再検証・フォーム送信等 |
+| GET + Write | ✓ | ✓ | フォーム送信等の書き込み（ISR 再検証には不要） |
 | 管理API | ✓ | ✓ | 外部システムからの管理操作 |
 
 - 各キーは API ごとに権限スコープ（対象API・許可操作）を個別設定できる。
@@ -52,7 +52,8 @@ microCMS設計書テンプレート。コンテンツモデル＝データ側の
 | 環境変数名 | 種別 | スコープ |
 | --- | --- | --- |
 | `MICROCMS_API_KEY` | GETのみ | 全API・GET |
-| `MICROCMS_WRITE_API_KEY` | GET + Write | Webhook再検証用 |
+| `MICROCMS_WRITE_API_KEY` | GET + Write | フォーム送信等の書き込み用（**書き込みがなければ発行しない**） |
+| `MICROCMS_WEBHOOK_SECRET` | Webhookシークレット | Webhook 署名検証（再検証に Write キーは不要。ato-microcms-webhook 参照） |
 
 ### セキュリティ設定
 
@@ -151,7 +152,7 @@ https://images.microcms-assets.io/assets/{serviceId}/{fileId}/{filename}
 | `fm` | 出力フォーマット | `webp` / `png` / `jpeg` / `avif` |
 | `dpr` | デバイスピクセル比 | `?dpr=2` |
 
-> Image API パラメータはフロントの `<Image>` コンポーネントや next/image の `loader` に渡す。ato-microcms-fetch の実装を参照。
+> Image API パラメータはフロントの `<Image>` コンポーネントや next/image の `loader` に渡す。実装は ato-microcms-fetch の `buildImageUrl`（SKILL.md「画像（Image API）」節）を使う。
 
 ---
 
